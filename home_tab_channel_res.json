@@ -39,9 +39,9 @@
             "movieUrl": "tag.a.0@data-url",
             "movieCover": "tag.img.0@data-src"
           },
-          {
+		  {
             "type": 1,
-            "title": "我的祖国",
+            "title": "明星推荐",
             "movieList": "class.m-mod4-list w-newfigure-list g-clear js-list.1@tag.li",
             "movieTitle": "tag.img.0@alt",
             "movieUrl": "tag.a.0@data-url",
@@ -49,7 +49,7 @@
           },
           {
             "type": 1,
-            "title": "大片派送",
+            "title": "厉害了！我的祖国",
             "movieList": "class.m-mod4-list w-newfigure-list g-clear js-list.2@tag.li",
             "movieTitle": "tag.img.0@alt",
             "movieUrl": "tag.a.0@data-url",
@@ -57,7 +57,7 @@
           },
           {
             "type": 1,
-            "title": "网络大电影",
+            "title": "撤档大片在线派送",
             "movieList": "class.m-mod4-list w-newfigure-list g-clear js-list.3@tag.li",
             "movieTitle": "tag.img.0@alt",
             "movieUrl": "tag.a.0@data-url",
@@ -65,7 +65,7 @@
           },
           {
             "type": 1,
-            "title": "单身狗粮",
+            "title": "网络大电影",
             "movieList": "class.m-mod4-list w-newfigure-list g-clear js-list.4@tag.li",
             "movieTitle": "tag.img.0@alt",
             "movieUrl": "tag.a.0@data-url",
@@ -73,7 +73,7 @@
           },
           {
             "type": 1,
-            "title": "票房冠军",
+            "title": "单身狗来嗑点糖",
             "movieList": "class.m-mod4-list w-newfigure-list g-clear js-list.5@tag.li",
             "movieTitle": "tag.img.0@alt",
             "movieUrl": "tag.a.0@data-url",
@@ -81,7 +81,7 @@
           },
           {
             "type": 1,
-            "title": "港味无厘头",
+            "title": "国产玄幻逆天改命",
             "movieList": "class.m-mod4-list w-newfigure-list g-clear js-list.6@tag.li",
             "movieTitle": "tag.img.0@alt",
             "movieUrl": "tag.a.0@data-url",
@@ -94,7 +94,7 @@
             "movieTitle": "tag.img.0@alt",
             "movieUrl": "tag.a.0@data-url",
             "movieCover": "tag.img.0@data-src"
-          }
+          },
         ]
       },
       {
