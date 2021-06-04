@@ -3,6 +3,13 @@
   "homeQQGroup": "https://gitee.com/pj567/TVMovie/raw/master/source/161889550905.png",
   "vodApi": [
     {
+      "id": 1,
+      "name": "魔闪资源",
+      "api": "http://app.anlc.vip/app.php/yszj/vod/at/xml/",
+      "click": true,
+      "searchFilter": false
+    },
+    {
       "id": 2,
       "name": "麻瓜资源",
       "api": "http://maguays.cc/api.php/provide/vod/at/xml/",
