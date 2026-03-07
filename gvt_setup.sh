@@ -1,7 +1,7 @@
 #!/bin/bash
 # ============================================================
-# 飞牛OS Intel GVT-g 永久部署工具 (Broadwell 专用)
-# 逻辑：内核参数注入 -> 镜像同步 -> 硬件永久挂载 -> 自启服务
+# FNOS GVT-g 终极部署脚本 (内核镜像加固 & 参数调优)
+# 针对：Intel Broadwell (5代) CPU 深度优化
 # ============================================================
 
 set -e
@@ -18,70 +18,72 @@ INFO="[${BLUE}  信息  ${NC}]"
 WAIT="[${YELLOW}  执行  ${NC}]"
 ERROR="[${RED}  错误  ${NC}]"
 
-# --- 核心变量 ---
+# --- 变量定义 ---
 UUID="00000000-0000-0000-0000-000000000011"
 MDEV_NAME="mdev_${UUID//-/_}_0000_00_02_0"
 GRUB_FILE="/etc/default/grub"
+MODULES_FILE="/etc/modules"
 
-# 检查 root 权限
-[[ $EUID -ne 0 ]] && echo -e "${ERROR} 请使用 sudo 运行此脚本！" && exit 1
-
-echo -e "${BLUE}============================================================${NC}"
-echo -e "${BLUE}          飞牛OS GVT-g 永久化部署助手 (智能自适应)          ${NC}"
+echo -e "\n${BLUE}============================================================${NC}"
+echo -e "${BLUE}          飞牛OS GVT-g 永久化部署助手 (内核镜像加固)        ${NC}"
 echo -e "${BLUE}============================================================${NC}"
 
-# --- 第 1 步：内核参数与引导镜像处理 ---
-echo -e "\n${INFO} 1. 正在检查 GRUB 引导参数..."
+# --- 第 1 步：内核参数与模块持久化 ---
+echo -e "\n${INFO} 1.1 正在优化 GRUB 引导参数顺序..."
 PARAMS=("intel_iommu=on" "iommu=pt" "i915.enable_gvt=1")
-NEED_UPDATE=false
+NEED_REFRESH=false
 
+# 确保参数在 quiet splash 之后追加，不改变原有首位位置
 for p in "${PARAMS[@]}"; do
     if ! grep "GRUB_CMDLINE_LINUX_DEFAULT" "$GRUB_FILE" | grep -q "$p"; then
-        echo -e "${YELLOW}[!] 缺失参数: $p${NC}"
-        NEED_UPDATE=true
+        echo -e "${WAIT} 追加参数: $p"
+        # 精准匹配：在 DEFAULT 行的最后一个引号前插入参数
+        sed -i "/GRUB_CMDLINE_LINUX_DEFAULT=/s/\"$/ $p\"/" "$GRUB_FILE"
+        NEED_REFRESH=true
     fi
 done
 
-if [ "$NEED_UPDATE" = true ]; then
-    echo -e "${WAIT} 正在备份并更新 $GRUB_FILE (注入至 DEFAULT 变量)..."
-    cp "$GRUB_FILE" "${GRUB_FILE}.bak"
-    
-    # 精准注入到 GRUB_CMDLINE_LINUX_DEFAULT 的双引号起始位置
-    for p in "${PARAMS[@]}"; do
-        if ! grep "GRUB_CMDLINE_LINUX_DEFAULT" "$GRUB_FILE" | grep -q "$p"; then
-            sed -i "/GRUB_CMDLINE_LINUX_DEFAULT=/s/\"/\"$p /" "$GRUB_FILE"
-        fi
-    done
+echo -e "\n${INFO} 1.2 正在将 5 个核心模块写入 $MODULES_FILE ..."
+CORE_MODS=("vfio" "vfio_iommu_type1" "vfio_pci" "vfio_virqfd" "kvmgt")
+for mod in "${CORE_MODS[@]}"; do
+    if ! grep -q "^$mod" "$MODULES_FILE"; then
+        echo -e "${WAIT} 写入模块: $mod"
+        echo "$mod" >> "$MODULES_FILE"
+        NEED_REFRESH=true
+    fi
+done
 
-    echo -e "${WAIT} 正在更新 GRUB 引导记录..."
+if [ "$NEED_REFRESH" = true ]; then
+    echo -e "${INFO} 正在重新生成 GRUB 引导配置..."
     update-grub
     
-    echo -e "${WAIT} 正在执行 update-initramfs -u -k all (同步内核镜像)..."
+    echo -e "${INFO} 正在同步内核镜像 (update-initramfs -u -k all)..."
+    # 该步骤确保模块被物理封装进启动镜像，解决开机识别慢的问题
     update-initramfs -u -k all
     
-    echo -e "${DONE} 配置已成功写入引导镜像。"
-    echo -e "${RED}系统必须重启以激活 GVT-g 内核模式。${NC}"
-    echo -e "${YELLOW}请重启宿主机，开机后再次运行脚本完成剩余配置。${NC}"
+    echo -e "${DONE} 内核环境已固化至引导镜像。"
+    echo -e "${RED}必须重启宿主机以激活底层驱动。${NC}"
+    echo -e "${YELLOW}重启后再次运行此脚本完成剩余硬件注入步骤。${NC}"
     exit 0
 fi
-echo -e "${DONE} 内核引导环境已就绪。"
+echo -e "${DONE} 内核与模块环境已就绪。"
 
-# --- 第 2 步：硬件类型探测与清理 ---
-echo -e "\n${INFO} 2. 正在探测硬件支持..."
+# --- 第 2 步：硬件切片激活 ---
+echo -e "\n${INFO} 2. 正在检查 GVT-g 硬件支持目录..."
 PCI_PATH="/sys/devices/pci0000:00/0000:00:02.0/mdev_supported_types"
+
 if [ ! -d "$PCI_PATH" ]; then
-    echo -e "${ERROR} 未发现 GVT-g 硬件支持目录，请确认重启已完成且 BIOS 开启了 VT-d。"
+    echo -e "${ERROR} 未发现硬件支持目录。请确认：1. 重启已完成 2. BIOS 开启 VT-d。"
     exit 1
 fi
 
-echo -e "${WAIT} 正在清理可能存在的旧设备定义..."
+echo -e "${WAIT} 正在清理旧定义并初始化..."
 virsh nodedev-destroy "$MDEV_NAME" 2>/dev/null || true
 virsh nodedev-undefine "$MDEV_NAME" 2>/dev/null || true
 
-# --- 第 3 步：定义并启动 mdev ---
-echo -e "\n${INFO} 3. 正在配置底层虚拟硬件..."
+# 选择切片类型
 types=($(ls $PCI_PATH))
-echo -e "${YELLOW}请选择显存规格 (Broadwell 推荐 V4_8):${NC}"
+echo -e "${YELLOW}请选择显存规格 (推荐 V4_8):${NC}"
 select type in "${types[@]}"; do
     [[ -n "$type" ]] && break || echo "选择无效"
 done
@@ -99,41 +101,43 @@ EOF
 
 virsh nodedev-define "$XML_PATH"
 virsh nodedev-start "$MDEV_NAME"
-echo -e "${DONE} 虚拟显卡设备已在宿主机激活。"
+echo -e "${DONE} 虚拟显卡底层设备已激活。"
 
-# --- 第 4 步：永久注入虚拟机 ---
-echo -e "\n${INFO} 4. 正在确认虚拟机配置..."
+# --- 第 3 步：虚拟机 XML 永久注入 ---
+echo -e "\n${INFO} 3. 正在搜索本地虚拟机..."
 vms=($(virsh list --all --name))
 if [ ${#vms[@]} -eq 0 ]; then
-    echo -e "${ERROR} 未发现任何虚拟机。"
+    echo -e "${ERROR} 未发现虚拟机。"
     exit 1
 fi
 
-echo -e "${YELLOW}请选择要挂载显卡的虚拟机:${NC}"
+echo -e "${YELLOW}请选择目标虚拟机:${NC}"
 select vm_name in "${vms[@]}"; do
-    [[ -n "$vm_name" ]] && break || echo "选择无效"
+    [[ -n "$vm_name" ]] && break || echo "无效选择"
 done
 
 INJECT_XML="/tmp/gvtg_inject.xml"
+# 为 5 代核显固定 PCI 插槽，提升 Windows 驱动稳定性
 cat > "$INJECT_XML" <<EOF
 <hostdev mode='subsystem' type='mdev' managed='no' model='vfio-pci'>
   <source>
     <address uuid='$UUID'/>
   </source>
+  <address type='pci' domain='0x0000' bus='0x00' slot='0x09' function='0x0'/>
 </hostdev>
 EOF
 
 # 使用 --config 进行永久异步注入（等同于手动 virsh edit）
 virsh detach-device "$vm_name" "$INJECT_XML" --config 2>/dev/null || true
 if virsh attach-device "$vm_name" "$INJECT_XML" --config; then
-    echo -e "${DONE} 显卡配置已永久注入虚拟机 $vm_name 的 XML 文件。"
+    echo -e "${DONE} 硬件已成功永久注入虚拟机 $vm_name 的配置中。"
 else
-    echo -e "${ERROR} 注入失败，请检查虚拟机 XML 格式。"
+    echo -e "${ERROR} XML 注入失败。"
     exit 1
 fi
 
-# --- 第 5 步：开机自启服务 ---
-echo -e "\n${INFO} 5. 正在设置开机自动激活服务..."
+# --- 第 4 步：注册自启服务 ---
+echo -e "\n${INFO} 4. 正在配置 Systemd 自启动服务补丁..."
 cat > /etc/systemd/system/mdev-gvtg.service <<EOF
 [Unit]
 Description=Start mdev GVT-g device
@@ -152,16 +156,12 @@ EOF
 systemctl daemon-reload
 systemctl enable mdev-gvtg.service
 systemctl start mdev-gvtg.service
-echo -e "${DONE} Systemd 自启服务配置完成。"
+echo -e "${DONE} 自启服务配置完成。"
 
-# --- 总结 ---
-echo -e "\n${GREEN}✨ 全部操作已优雅完成！${NC}"
+echo -e "\n${GREEN}✨ 部署全部完成！${NC}"
+echo -e "${INFO} 引导顺序：$(grep "GRUB_CMDLINE_LINUX_DEFAULT" /etc/default/grub)"
+echo -e "${INFO} 加载模块：$(cat /etc/modules | grep -E 'kvmgt|vfio')"
 echo -e "${BLUE}------------------------------------------------------------${NC}"
-echo -e "虚拟机名称: ${GREEN}$vm_name${NC}"
-echo -e "UUID标识:   ${GREEN}$UUID${NC}"
-echo -e "引导镜像:   ${GREEN}已通过 update-initramfs 同步${NC}"
-echo -e "参数位置:   ${GREEN}GRUB_CMDLINE_LINUX_DEFAULT${NC}"
-echo -e "${BLUE}------------------------------------------------------------${NC}"
-echo -e "${YELLOW}现在您可以直接启动虚拟机，显卡驱动将稳定加载。${NC}"
+echo -e "${YELLOW}提示：现在直接启动虚拟机，Windows 10 驱动将稳定工作。${NC}"
 
 rm -f "$INJECT_XML"
